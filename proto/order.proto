@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package ecommerce.order.v1;
+
+import "shipment.proto";
+
+service OrderService {
+  rpc CreateOrder (CreateOrderRequest) returns (CreateOrderResponse);
+  rpc ListOrders (ListOrdersRequest) returns (ListOrdersResponse);
+  rpc GetOrder (GetOrderRequest) returns (GetOrderResponse);
+}
+
+message OrderItemRequest {
+  uint32 pid = 1;
+  uint32 qty = 2;
+}
+
+message CreateOrderRequest {
+  repeated OrderItemRequest items = 1;
+}
+
+message ListOrdersRequest {}
+
+message GetOrderRequest {
+  uint32 oid = 1;
+}
+
+message OrderDetail {
+  uint32 pid = 1;
+  uint32 qty = 2;
+  string unit_price = 3;
+}
+
+message OrderSummary {
+  uint32 oid = 1;
+  uint32 uid = 2;
+  string discount = 3;
+}
+
+message CreateOrderResponse {
+  uint32 oid = 1;
+  uint32 uid = 2;
+  string discount = 3;
+  repeated OrderDetail items = 4;
+  ecommerce.shipment.v1.Shipment shipment = 5;
+}
+
+message ListOrdersResponse {
+  repeated OrderSummary items = 1;
+}
+
+message GetOrderResponse {
+  uint32 oid = 1;
+  uint32 uid = 2;
+  string discount = 3;
+  repeated OrderDetail items = 4;
+}

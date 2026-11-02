@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package ecommerce.shipment.v1;
+
+service ShipmentService {
+  rpc GetShipment (GetShipmentRequest) returns (Shipment);
+  rpc UpdateShipmentStatus (UpdateShipmentStatusRequest) returns (Shipment);
+    rpc GetShipmentBySourceEvent (GetShipmentBySourceEventRequest) returns (Shipment);
+}
+
+message Shipment {
+  uint32 shipid = 1;
+  uint32 oid = 2;
+  string status = 3;
+}
+
+message GetShipmentRequest {
+  uint32 shipid = 1;
+}
+
+message UpdateShipmentStatusRequest {
+  uint32 shipid = 1;
+  string status = 2;
+}
+message GetShipmentBySourceEventRequest {
+  string source_event_id = 1;
+}

@@ -1,0 +1,427 @@
+services:
+  auth-migrate:
+    image: ecommerce-auth-service:local
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    init: true
+    restart: "no"
+    command:
+      - node
+      - ./src/infrastructure/database/migrate.js
+    env_file:
+      - ./services/auth-service/.env
+    environment:
+      PGHOST: postgres-auth
+      PGPORT: "5432"
+      PGDATABASE: auth_db
+      PGUSER: auth_user
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+
+  customer-migrate:
+    image: ecommerce-customer-service:local
+    build:
+      context: .
+      dockerfile: services/customer-service/Dockerfile
+    init: true
+    restart: "no"
+    command:
+      - node
+      - ./src/infrastructure/database/migrate.js
+    env_file:
+      - ./services/customer-service/.env
+    environment:
+      PGHOST: postgres-customer
+      PGPORT: "5432"
+      PGDATABASE: customer_db
+      PGUSER: customer_user
+    depends_on:
+      postgres-customer:
+        condition: service_healthy
+
+  order-migrate:
+    image: ecommerce-order-service:local
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    init: true
+    restart: "no"
+    command:
+      - node
+      - ./src/infrastructure/database/migrate.js
+    env_file:
+      - ./services/order-service/.env
+    environment:
+      PGHOST: postgres-order
+      PGPORT: "5432"
+      PGDATABASE: order_db
+      PGUSER: order_user
+    depends_on:
+      postgres-order:
+        condition: service_healthy
+
+  kafka-init:
+    image: apache/kafka:3.9.1
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint:
+      - /bin/bash
+      - -ec
+    command:
+      - |
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:9092 \
+          --create \
+          --if-not-exists \
+          --topic order-created \
+          --partitions 1 \
+          --replication-factor 1
+
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:9092 \
+          --describe \
+          --topic order-created
+
+        echo "Kafka OrderCreated bootstrap: OK"
+
+  customer-service:
+    image: ecommerce-customer-service:local
+    build:
+      context: .
+      dockerfile: services/customer-service/Dockerfile
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 40s
+    env_file:
+      - ./services/customer-service/.env
+    environment:
+      PGHOST: postgres-customer
+      PGPORT: "5432"
+      PGDATABASE: customer_db
+      PGUSER: customer_user
+      CUSTOMER_GRPC_ADDRESS: "0.0.0.0:50052"
+    depends_on:
+      customer-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          const grpc = require("@grpc/grpc-js");
+          const client = new grpc.Client(
+            "127.0.0.1:50052",
+            grpc.credentials.createInsecure()
+          );
+          client.waitForReady(Date.now() + 2000, (error) => {
+            client.close();
+            process.exit(error ? 1 : 0);
+          });
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  auth-service:
+    image: ecommerce-auth-service:local
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 40s
+    env_file:
+      - ./services/auth-service/.env
+    environment:
+      PGHOST: postgres-auth
+      PGPORT: "5432"
+      PGDATABASE: auth_db
+      PGUSER: auth_user
+      AUTH_GRPC_ADDRESS: "0.0.0.0:50051"
+      CUSTOMER_GRPC_ADDRESS: "customer-service:50052"
+    depends_on:
+      auth-migrate:
+        condition: service_completed_successfully
+      customer-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          const grpc = require("@grpc/grpc-js");
+          const client = new grpc.Client(
+            "127.0.0.1:50051",
+            grpc.credentials.createInsecure()
+          );
+          client.waitForReady(Date.now() + 2000, (error) => {
+            client.close();
+            process.exit(error ? 1 : 0);
+          });
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  product-service:
+    image: ecommerce-product-service:local
+    build:
+      context: .
+      dockerfile: services/product-service/Dockerfile
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 40s
+    env_file:
+      - ./services/product-service/.env
+    environment:
+      MONGODB_URI: "mongodb://mongo-product:27017/product_db?replicaSet=product-rs"
+      PRODUCT_GRPC_ADDRESS: "0.0.0.0:50053"
+    depends_on:
+      mongo-product-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          const grpc = require("@grpc/grpc-js");
+          const client = new grpc.Client(
+            "127.0.0.1:50053",
+            grpc.credentials.createInsecure()
+          );
+          client.waitForReady(Date.now() + 2000, (error) => {
+            client.close();
+            process.exit(error ? 1 : 0);
+          });
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  shipment-service:
+    image: ecommerce-shipment-service:local
+    build:
+      context: .
+      dockerfile: services/shipment-service/Dockerfile
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 40s
+    env_file:
+      - ./services/shipment-service/.env
+    environment:
+      MONGODB_URI: "mongodb://mongo-shipment:27017/shipment_db"
+      SHIPMENT_GRPC_ADDRESS: "0.0.0.0:50055"
+      KAFKA_BROKERS: "kafka:9092"
+    depends_on:
+      mongo-shipment:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          const grpc = require("@grpc/grpc-js");
+          const client = new grpc.Client(
+            "127.0.0.1:50055",
+            grpc.credentials.createInsecure()
+          );
+          client.waitForReady(Date.now() + 2000, (error) => {
+            client.close();
+            process.exit(error ? 1 : 0);
+          });
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  order-service:
+    image: ecommerce-order-service:local
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 40s
+    env_file:
+      - ./services/order-service/.env
+    environment:
+      PGHOST: postgres-order
+      PGPORT: "5432"
+      PGDATABASE: order_db
+      PGUSER: order_user
+      ORDER_GRPC_ADDRESS: "0.0.0.0:50054"
+      CUSTOMER_GRPC_ADDRESS: "customer-service:50052"
+      PRODUCT_GRPC_ADDRESS: "product-service:50053"
+      SHIPMENT_GRPC_ADDRESS: "shipment-service:50055"
+      KAFKA_BROKERS: "kafka:9092"
+    depends_on:
+      order-migrate:
+        condition: service_completed_successfully
+      customer-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      shipment-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          const grpc = require("@grpc/grpc-js");
+          const client = new grpc.Client(
+            "127.0.0.1:50054",
+            grpc.credentials.createInsecure()
+          );
+          client.waitForReady(Date.now() + 2000, (error) => {
+            client.close();
+            process.exit(error ? 1 : 0);
+          });
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  order-creation-worker:
+    image: ecommerce-order-service:local
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 130s
+    command:
+      - node
+      - ./src/worker.js
+    env_file:
+      - ./services/order-service/.env
+    environment:
+      PGHOST: postgres-order
+      PGPORT: "5432"
+      PGDATABASE: order_db
+      PGUSER: order_user
+      ORDER_GRPC_ADDRESS: "0.0.0.0:50054"
+      CUSTOMER_GRPC_ADDRESS: "customer-service:50052"
+      PRODUCT_GRPC_ADDRESS: "product-service:50053"
+      SHIPMENT_GRPC_ADDRESS: "shipment-service:50055"
+      KAFKA_BROKERS: "kafka:9092"
+    depends_on:
+      order-service:
+        condition: service_healthy
+
+  order-outbox-worker:
+    image: ecommerce-order-service:local
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 130s
+    command:
+      - node
+      - ./src/outbox-worker.js
+    env_file:
+      - ./services/order-service/.env
+    environment:
+      PGHOST: postgres-order
+      PGPORT: "5432"
+      PGDATABASE: order_db
+      PGUSER: order_user
+      ORDER_GRPC_ADDRESS: "0.0.0.0:50054"
+      CUSTOMER_GRPC_ADDRESS: "customer-service:50052"
+      PRODUCT_GRPC_ADDRESS: "product-service:50053"
+      SHIPMENT_GRPC_ADDRESS: "shipment-service:50055"
+      KAFKA_BROKERS: "kafka:9092"
+    depends_on:
+      order-service:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  shipment-consumer:
+    image: ecommerce-shipment-service:local
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 130s
+    command:
+      - node
+      - ./src/consumer.js
+    env_file:
+      - ./services/shipment-service/.env
+    environment:
+      MONGODB_URI: "mongodb://mongo-shipment:27017/shipment_db"
+      SHIPMENT_GRPC_ADDRESS: "0.0.0.0:50055"
+      KAFKA_BROKERS: "kafka:9092"
+    depends_on:
+      shipment-service:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  api-gateway:
+    image: ecommerce-api-gateway:local
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 20s
+    env_file:
+      - ./services/api-gateway/.env
+    environment:
+      GATEWAY_HOST: "0.0.0.0"
+      GATEWAY_PORT: "3001"
+      REDIS_URL: "redis://redis:6379"
+      AUTH_GRPC_ADDRESS: "auth-service:50051"
+      CUSTOMER_GRPC_ADDRESS: "customer-service:50052"
+      PRODUCT_GRPC_ADDRESS: "product-service:50053"
+      ORDER_GRPC_ADDRESS: "order-service:50054"
+      SHIPMENT_GRPC_ADDRESS: "shipment-service:50055"
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      customer-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      shipment-service:
+        condition: service_healthy
+      order-creation-worker:
+        condition: service_started
+      order-outbox-worker:
+        condition: service_started
+      shipment-consumer:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          (async () => {
+            try {
+              const response = await fetch(
+                "http://127.0.0.1:3001/api/health",
+                { signal: AbortSignal.timeout(2000) }
+              );
+              const body = await response.json();
+              process.exit(
+                response.ok && body.status === "UP" ? 0 : 1
+              );
+            } catch {
+              process.exit(1);
+            }
+          })();
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s

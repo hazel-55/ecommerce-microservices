@@ -1,0 +1,24 @@
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS roles (
+    roleid INTEGER PRIMARY KEY,
+    rolename VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    uid INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    phone VARCHAR(30) NOT NULL,
+    roleid INTEGER NOT NULL REFERENCES roles(roleid)
+);
+
+INSERT INTO roles (roleid, rolename)
+VALUES
+    (1, 'CUSTOMER'),
+    (2, 'ADMIN'),
+    (3, 'SHIPMENT_STAFF')
+ON CONFLICT (roleid) DO NOTHING;
+
+COMMIT;

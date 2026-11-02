@@ -1,0 +1,10 @@
+.git
+**/.git
+**/node_modules
+**/.env
+**/.env.*
+**/.npmrc
+**/*.log
+**/coverage
+**/.nyc_output
+**/*.fixture.json

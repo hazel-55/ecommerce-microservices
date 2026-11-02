@@ -1,0 +1,30 @@
+import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
+import { loadSync } from "@grpc/proto-loader";
+
+const protoPath = fileURLToPath(
+    new URL("../../../proto/customer.proto", import.meta.url)
+);
+
+const definition = loadSync(protoPath, {
+    keepCase: false,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true,
+});
+
+const service = definition["ecommerce.customer.v1.CustomerService"];
+
+assert.ok(service, "Khong tim thay CustomerService");
+
+const methods = Object.keys(service).sort();
+
+assert.deepEqual(
+    methods,
+    ["CreateCustomer", "GetCustomer", "UpdateCustomer"],
+    "CustomerService co danh sach RPC khong dung"
+);
+
+console.log("Customer proto: OK");
+console.log("RPC methods:", methods.join(", "));

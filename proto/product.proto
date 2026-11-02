@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package ecommerce.product.v1;
+
+service ProductService {
+  rpc ListProducts (ListProductsRequest) returns (ListProductsResponse);
+  rpc GetProduct (GetProductRequest) returns (Product);
+  rpc CreateProduct (CreateProductRequest) returns (Product);
+  rpc UpdateProduct (UpdateProductRequest) returns (ProductMutationResponse);
+  rpc DeleteProduct (DeleteProductRequest) returns (ProductMutationResponse);
+
+  rpc ReserveStock (ReserveStockRequest) returns (StockReservationResponse);
+  rpc ConfirmStock (StockOperationRequest) returns (StockReservationResponse);
+  rpc ReleaseStock (StockOperationRequest) returns (StockReservationResponse);
+  rpc GetStockReservation (StockOperationRequest) returns (StockReservationResponse);
+}
+
+message Product {
+  uint32 pid = 1;
+  string pname = 2;
+  string price = 3;
+  uint32 quantity = 4;
+}
+
+message ListProductsRequest {}
+
+message ListProductsResponse {
+  repeated Product items = 1;
+}
+
+message GetProductRequest {
+  uint32 pid = 1;
+}
+
+message CreateProductRequest {
+  string pname = 1;
+  string price = 2;
+  uint32 quantity = 3;
+}
+
+message UpdateProductRequest {
+  uint32 pid = 1;
+  string pname = 2;
+  string price = 3;
+  uint32 quantity = 4;
+}
+
+message DeleteProductRequest {
+  uint32 pid = 1;
+}
+
+message ProductMutationResponse {
+  string message = 1;
+  uint32 pid = 2;
+}
+
+message StockItemRequest {
+  uint32 pid = 1;
+  uint32 qty = 2;
+}
+
+message ReserveStockRequest {
+  string operation_id = 1;
+  uint32 uid = 2;
+  repeated StockItemRequest items = 3;
+}
+
+message StockOperationRequest {
+  string operation_id = 1;
+  uint32 uid = 2;
+}
+
+message StockReservationItem {
+  uint32 pid = 1;
+  uint32 qty = 2;
+  string unit_price = 3;
+}
+
+message StockReservationResponse {
+  string operation_id = 1;
+  uint32 uid = 2;
+  string status = 3;
+  repeated StockReservationItem items = 4;
+}
